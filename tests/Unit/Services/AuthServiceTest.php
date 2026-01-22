@@ -5,11 +5,14 @@ declare(strict_types=1);
 namespace Tests\Unit\Services;
 
 use App\Core\Exceptions\ConflictException;
+use App\Core\Exceptions\UnauthorizedException;
 use App\Core\Exceptions\ValidationException;
+use App\DTOs\LoginResponseDTO;
 use App\DTOs\UserResponseDTO;
 use App\Entities\User;
 use App\Repositories\UserRepository;
 use App\Services\AuthService;
+use App\Services\JwtService;
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 
@@ -17,11 +20,13 @@ class AuthServiceTest extends TestCase
 {
     private AuthService $authService;
     private UserRepository $mockRepository;
+    private JwtService $mockJwtService;
 
     protected function setUp(): void
     {
         $this->mockRepository = $this->createMock(UserRepository::class);
-        $this->authService = new AuthService($this->mockRepository);
+        $this->mockJwtService = $this->createMock(JwtService::class);
+        $this->authService = new AuthService($this->mockRepository, $this->mockJwtService);
     }
 
     public function test_register_throws_validation_exception_when_email_is_missing(): void
@@ -195,6 +200,147 @@ class AuthServiceTest extends TestCase
             'password' => 'password123',
             'first_name' => 'John',
             'last_name' => 'Doe'
+        ]);
+    }
+
+    // Login tests
+
+    public function test_login_throws_validation_exception_when_email_is_missing(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->authService->login([
+            'password' => 'password123'
+        ]);
+    }
+
+    public function test_login_throws_validation_exception_when_password_is_missing(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->authService->login([
+            'email' => 'test@example.com'
+        ]);
+    }
+
+    public function test_login_throws_unauthorized_when_user_not_found(): void
+    {
+        $this->mockRepository
+            ->method('findByEmail')
+            ->with('nonexistent@example.com')
+            ->willReturn(null);
+
+        $this->expectException(UnauthorizedException::class);
+        $this->expectExceptionMessage('Invalid credentials');
+
+        $this->authService->login([
+            'email' => 'nonexistent@example.com',
+            'password' => 'password123'
+        ]);
+    }
+
+    public function test_login_throws_unauthorized_when_password_is_incorrect(): void
+    {
+        $user = new User(
+            id: 1,
+            email: 'test@example.com',
+            password: password_hash('correctpassword', PASSWORD_BCRYPT),
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'patient'
+        );
+
+        $this->mockRepository
+            ->method('findByEmail')
+            ->with('test@example.com')
+            ->willReturn($user);
+
+        $this->expectException(UnauthorizedException::class);
+        $this->expectExceptionMessage('Invalid credentials');
+
+        $this->authService->login([
+            'email' => 'test@example.com',
+            'password' => 'wrongpassword'
+        ]);
+    }
+
+    public function test_login_returns_tokens_on_success(): void
+    {
+        $user = new User(
+            id: 1,
+            email: 'test@example.com',
+            password: password_hash('password123', PASSWORD_BCRYPT),
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'patient',
+            createdAt: new DateTimeImmutable()
+        );
+
+        $this->mockRepository
+            ->method('findByEmail')
+            ->with('test@example.com')
+            ->willReturn($user);
+
+        $this->mockRepository
+            ->expects($this->once())
+            ->method('updateLastLogin')
+            ->with(1);
+
+        $this->mockJwtService
+            ->method('generateTokenPair')
+            ->with($user)
+            ->willReturn([
+                'access_token' => 'access_token_value',
+                'refresh_token' => 'refresh_token_value',
+                'token_type' => 'Bearer',
+                'expires_in' => 3600
+            ]);
+
+        $result = $this->authService->login([
+            'email' => 'test@example.com',
+            'password' => 'password123'
+        ]);
+
+        $this->assertInstanceOf(LoginResponseDTO::class, $result);
+        $this->assertEquals('access_token_value', $result->accessToken);
+        $this->assertEquals('refresh_token_value', $result->refreshToken);
+        $this->assertEquals('Bearer', $result->tokenType);
+        $this->assertEquals(3600, $result->expiresIn);
+        $this->assertEquals('test@example.com', $result->user->email);
+    }
+
+    public function test_login_updates_last_login_timestamp(): void
+    {
+        $user = new User(
+            id: 5,
+            email: 'test@example.com',
+            password: password_hash('password123', PASSWORD_BCRYPT),
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'patient'
+        );
+
+        $this->mockRepository
+            ->method('findByEmail')
+            ->willReturn($user);
+
+        $this->mockRepository
+            ->expects($this->once())
+            ->method('updateLastLogin')
+            ->with(5);
+
+        $this->mockJwtService
+            ->method('generateTokenPair')
+            ->willReturn([
+                'access_token' => 'token',
+                'refresh_token' => 'refresh',
+                'token_type' => 'Bearer',
+                'expires_in' => 3600
+            ]);
+
+        $this->authService->login([
+            'email' => 'test@example.com',
+            'password' => 'password123'
         ]);
     }
 }
