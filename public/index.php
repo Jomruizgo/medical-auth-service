@@ -7,6 +7,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use App\Core\Router;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\Exceptions\NotFoundException;
 
 // Load environment variables
 $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/..');
@@ -37,12 +38,9 @@ try {
 
     $response = $router->dispatch($request);
     $response->send();
+} catch (NotFoundException $e) {
+    Response::notFound($e->getMessage())->send();
 } catch (Throwable $e) {
-    $response = new Response();
-    $response->setStatusCode(500);
-    $response->setBody([
-        'error' => true,
-        'message' => $_ENV['APP_DEBUG'] === 'true' ? $e->getMessage() : 'Internal Server Error'
-    ]);
-    $response->send();
+    $message = $_ENV['APP_DEBUG'] === 'true' ? $e->getMessage() : 'Internal Server Error';
+    Response::error($message, 500)->send();
 }
