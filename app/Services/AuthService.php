@@ -17,9 +17,9 @@ class AuthService
 {
     private UserRepository $userRepository;
 
-    public function __construct()
+    public function __construct(?UserRepository $userRepository = null)
     {
-        $this->userRepository = new UserRepository();
+        $this->userRepository = $userRepository ?? new UserRepository();
     }
 
     public function register(array $data): UserResponseDTO

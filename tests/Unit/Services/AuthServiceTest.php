@@ -12,7 +12,6 @@ use App\Repositories\UserRepository;
 use App\Services\AuthService;
 use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
-use ReflectionClass;
 
 class AuthServiceTest extends TestCase
 {
@@ -22,13 +21,7 @@ class AuthServiceTest extends TestCase
     protected function setUp(): void
     {
         $this->mockRepository = $this->createMock(UserRepository::class);
-        $this->authService = new AuthService();
-
-        // Inject mock repository using reflection
-        $reflection = new ReflectionClass($this->authService);
-        $property = $reflection->getProperty('userRepository');
-        $property->setAccessible(true);
-        $property->setValue($this->authService, $this->mockRepository);
+        $this->authService = new AuthService($this->mockRepository);
     }
 
     public function test_register_throws_validation_exception_when_email_is_missing(): void
