@@ -1,0 +1,42 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8001:8001"
+    volumes:
+      - .:/app
+      - vendor:/app/vendor
+    environment:
+      - APP_ENV=development
+      - APP_DEBUG=true
+      - DB_HOST=db
+      - DB_DATABASE=medical_auth
+      - DB_USERNAME=root
+      - DB_PASSWORD=secret
+      - JWT_SECRET=dev-secret-key-change-in-production
+    depends_on:
+      - db
+
+  db:
+    image: mysql:8.0
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=secret
+      - MYSQL_DATABASE=medical_auth
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+
+  test:
+    build: .
+    volumes:
+      - .:/app
+      - vendor:/app/vendor
+    entrypoint: ["vendor/bin/phpunit"]
+    profiles:
+      - test
+
+volumes:
+  mysql_data:
+  vendor:
