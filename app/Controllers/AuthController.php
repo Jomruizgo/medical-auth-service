@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\Exceptions\ConflictException;
+use App\Core\Exceptions\UnauthorizedException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Request;
 use App\Core\Response;
@@ -29,6 +30,19 @@ class AuthController
             return Response::validationError($e->getErrors());
         } catch (ConflictException $e) {
             return Response::conflict($e->getMessage());
+        }
+    }
+
+    public function login(Request $request, array $params): Response
+    {
+        try {
+            $loginResponse = $this->authService->login($request->getBody());
+
+            return Response::success($loginResponse->toArray());
+        } catch (ValidationException $e) {
+            return Response::validationError($e->getErrors());
+        } catch (UnauthorizedException $e) {
+            return Response::unauthorized($e->getMessage());
         }
     }
 }

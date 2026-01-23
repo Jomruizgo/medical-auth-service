@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Core\Exceptions\ConflictException;
+use App\Core\Exceptions\UnauthorizedException;
 use App\Core\Exceptions\ValidationException;
 use App\Core\Validator;
+use App\DTOs\LoginDTO;
+use App\DTOs\LoginResponseDTO;
 use App\DTOs\RegisterUserDTO;
 use App\DTOs\UserResponseDTO;
 use App\Entities\User;
@@ -16,10 +19,14 @@ use App\Repositories\UserRepository;
 class AuthService
 {
     private UserRepository $userRepository;
+    private JwtService $jwtService;
 
-    public function __construct(?UserRepository $userRepository = null)
-    {
+    public function __construct(
+        ?UserRepository $userRepository = null,
+        ?JwtService $jwtService = null
+    ) {
         $this->userRepository = $userRepository ?? new UserRepository();
+        $this->jwtService = $jwtService ?? new JwtService();
     }
 
     public function register(array $data): UserResponseDTO
@@ -49,6 +56,39 @@ class AuthService
             'password' => ['required', 'min:8', 'max:255'],
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100']
+        ]);
+
+        if (!$isValid) {
+            throw new ValidationException($validator->getErrors());
+        }
+    }
+
+    public function login(array $data): LoginResponseDTO
+    {
+        $this->validateLogin($data);
+
+        $dto = LoginDTO::fromArray($data);
+
+        $user = $this->userRepository->findByEmail($dto->email);
+
+        if (!$user || !password_verify($dto->password, $user->getPassword())) {
+            throw new UnauthorizedException('Invalid credentials');
+        }
+
+        $this->userRepository->updateLastLogin($user->getId());
+
+        $tokens = $this->jwtService->generateTokenPair($user);
+
+        return LoginResponseDTO::fromTokensAndUser($tokens, $user);
+    }
+
+    private function validateLogin(array $data): void
+    {
+        $validator = new Validator($data);
+
+        $isValid = $validator->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required']
         ]);
 
         if (!$isValid) {

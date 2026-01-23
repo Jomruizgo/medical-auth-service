@@ -73,4 +73,10 @@ class UserRepository
 
         return $this->findById($user->getId());
     }
+
+    public function updateLastLogin(int $userId): void
+    {
+        $stmt = $this->db->prepare('UPDATE users SET last_login = NOW() WHERE id = :id');
+        $stmt->execute(['id' => $userId]);
+    }
 }
