@@ -10,7 +10,9 @@ use App\Core\Exceptions\ValidationException;
 use App\Core\Validator;
 use App\DTOs\LoginDTO;
 use App\DTOs\LoginResponseDTO;
+use App\DTOs\RefreshTokenDTO;
 use App\DTOs\RegisterUserDTO;
+use App\DTOs\TokenResponseDTO;
 use App\DTOs\UserResponseDTO;
 use App\Entities\User;
 use App\Mappers\UserMapper;
@@ -89,6 +91,42 @@ class AuthService
         $isValid = $validator->validate([
             'email' => ['required', 'email'],
             'password' => ['required']
+        ]);
+
+        if (!$isValid) {
+            throw new ValidationException($validator->getErrors());
+        }
+    }
+
+    public function refresh(array $data): TokenResponseDTO
+    {
+        $this->validateRefresh($data);
+
+        $dto = RefreshTokenDTO::fromArray($data);
+
+        $userId = $this->jwtService->validateRefreshToken($dto->refreshToken);
+
+        if (!$userId) {
+            throw new UnauthorizedException('Invalid or expired refresh token');
+        }
+
+        $user = $this->userRepository->findById($userId);
+
+        if (!$user) {
+            throw new UnauthorizedException('User not found');
+        }
+
+        $tokens = $this->jwtService->generateTokenPair($user);
+
+        return TokenResponseDTO::fromTokens($tokens);
+    }
+
+    private function validateRefresh(array $data): void
+    {
+        $validator = new Validator($data);
+
+        $isValid = $validator->validate([
+            'refresh_token' => ['required']
         ]);
 
         if (!$isValid) {

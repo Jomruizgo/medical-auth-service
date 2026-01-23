@@ -75,6 +75,21 @@ class JwtService
         }
     }
 
+    public function validateRefreshToken(string $token): ?int
+    {
+        $payload = $this->validateToken($token);
+
+        if (!$payload) {
+            return null;
+        }
+
+        if (($payload['type'] ?? '') !== 'refresh') {
+            return null;
+        }
+
+        return (int) $payload['sub'];
+    }
+
     public function getAccessExpiration(): int
     {
         return $this->accessExpiration;
