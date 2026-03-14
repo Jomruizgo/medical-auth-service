@@ -45,4 +45,17 @@ class AuthController
             return Response::unauthorized($e->getMessage());
         }
     }
+
+    public function refresh(Request $request, array $params): Response
+    {
+        try {
+            $tokenResponse = $this->authService->refresh($request->getBody());
+
+            return Response::success($tokenResponse->toArray());
+        } catch (ValidationException $e) {
+            return Response::validationError($e->getErrors());
+        } catch (UnauthorizedException $e) {
+            return Response::unauthorized($e->getMessage());
+        }
+    }
 }

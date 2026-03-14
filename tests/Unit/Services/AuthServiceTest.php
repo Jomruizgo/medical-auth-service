@@ -8,6 +8,7 @@ use App\Core\Exceptions\ConflictException;
 use App\Core\Exceptions\UnauthorizedException;
 use App\Core\Exceptions\ValidationException;
 use App\DTOs\LoginResponseDTO;
+use App\DTOs\TokenResponseDTO;
 use App\DTOs\UserResponseDTO;
 use App\Entities\User;
 use App\Repositories\UserRepository;
@@ -342,5 +343,91 @@ class AuthServiceTest extends TestCase
             'email' => 'test@example.com',
             'password' => 'password123'
         ]);
+    }
+
+    // Refresh token tests
+
+    public function test_refresh_throws_validation_exception_when_token_is_missing(): void
+    {
+        $this->expectException(ValidationException::class);
+
+        $this->authService->refresh([]);
+    }
+
+    public function test_refresh_throws_unauthorized_when_token_is_invalid(): void
+    {
+        $this->mockJwtService
+            ->method('validateRefreshToken')
+            ->with('invalid_token')
+            ->willReturn(null);
+
+        $this->expectException(UnauthorizedException::class);
+        $this->expectExceptionMessage('Invalid or expired refresh token');
+
+        $this->authService->refresh([
+            'refresh_token' => 'invalid_token'
+        ]);
+    }
+
+    public function test_refresh_throws_unauthorized_when_user_not_found(): void
+    {
+        $this->mockJwtService
+            ->method('validateRefreshToken')
+            ->with('valid_token')
+            ->willReturn(999);
+
+        $this->mockRepository
+            ->method('findById')
+            ->with(999)
+            ->willReturn(null);
+
+        $this->expectException(UnauthorizedException::class);
+        $this->expectExceptionMessage('User not found');
+
+        $this->authService->refresh([
+            'refresh_token' => 'valid_token'
+        ]);
+    }
+
+    public function test_refresh_returns_new_tokens_on_success(): void
+    {
+        $user = new User(
+            id: 1,
+            email: 'test@example.com',
+            password: 'hashed',
+            firstName: 'John',
+            lastName: 'Doe',
+            role: 'patient'
+        );
+
+        $this->mockJwtService
+            ->method('validateRefreshToken')
+            ->with('valid_refresh_token')
+            ->willReturn(1);
+
+        $this->mockRepository
+            ->method('findById')
+            ->with(1)
+            ->willReturn($user);
+
+        $this->mockJwtService
+            ->method('generateTokenPair')
+            ->with($user)
+            ->willReturn([
+                'access_token' => 'new_access_token',
+                'refresh_token' => 'new_refresh_token',
+                'token_type' => 'Bearer',
+                'expires_in' => 3600
+            ]);
+
+        $result = $this->authService->refresh([
+            'refresh_token' => 'valid_refresh_token'
+        ]);
+
+        $this->assertInstanceOf(TokenResponseDTO::class, $result);
+        $this->assertEquals('new_access_token', $result->accessToken);
+        $this->assertEquals('new_refresh_token', $result->refreshToken);
+        $this->assertEquals('Bearer', $result->tokenType);
+        $this->assertEquals(3600, $result->expiresIn);
     }
 }
